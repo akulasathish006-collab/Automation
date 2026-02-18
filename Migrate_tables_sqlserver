@@ -1,0 +1,41 @@
+--*/*--SQL Server commands --*/*--
+
+--*/*--Migrate tables from one sql server to another sqlserver through python script--*/*--
+
+--*/*--previously check the installation done on python
+pip install pyodbc pandas sqlalchemy 
+if not please run this in python or cmd or vscode--*/*--
+
+--*/*--below is the script to copy past--*/*-
+
+import pyodbc
+import pandas as pd
+from sqlalchemy import create_engine
+src_conn = pyodbc.connect(
+    "DRIVER={ODBC Driver 18 for SQL Server};"
+    "SERVER=ISTHYDPC136\\SQLSERVER2019DEV;"
+    "DATABASE=abc;"
+    "UID=sa;"
+    "PWD=$ISTHYDPC136$;"
+    "Encrypt=no;"
+    "TrustServerCertificate=yes;"
+)
+
+dest_engine = create_engine(
+    "mssql+pyodbc://sa:$ISTHYDPC136$@ISTHYDPC136\\MSSQLSERVER2022/abc_new"
+--*/*--"mssql+pyodbc://your_username:your_password@DEST_SERVER_NAME/DEST_DB_NAME?driver=ODBC+Driver+18+for+SQL+Server" --*/*--
+    "?driver=ODBC+Driver+18+for+SQL+Server"
+    "&Encrypt=no"
+    "&TrustServerCertificate=yes"
+)
+
+tables = ['table_name', 'table_name2']
+
+for table in tables:
+    print(f"Migrating table: {table}")
+    df = pd.read_sql(f"SELECT * FROM [{table}]", src_conn)
+    df.to_sql(table, con=dest_engine, if_exists='replace', index=False)
+    print(f"Table {table} migrated successfully!")
+
+src_conn.close()
+print("All tables migrated successfully!")

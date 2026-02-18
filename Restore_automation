@@ -1,0 +1,91 @@
+--*/*--Restore the DB backup from on sqlserver to another sqlserver --*/*--
+
+--*/*--
+1️⃣ Set secret
+--Windows (PowerShell)
+--setx SRC_DB_PWD "StrongPasswordHere"
+--setx DEST_DB_PWD "StrongPasswordHere"
+--*/*--
+
+import pyodbc
+import logging
+import os
+from datetime import datetime
+
+# ---------- LOGGING ----------
+logging.basicConfig(
+    filename="sql_migration.log",
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+
+# ---------- CONFIG ----------
+SRC_SERVER = "ISTHYDPC136\\SQLSERVER2019DEV"
+DEST_SERVER = "ISTHYDPC136\\MSSQLSERVER2022"
+DATABASE = "abc"
+
+BACKUP_DIR = r"\\ISTHYDPC136\sqlbackups"   # secure shared folder
+BACKUP_FILE = f"{DATABASE}_{datetime.now():%Y%m%d_%H%M%S}.bak"
+
+SRC_PWD = os.getenv("SRC_DB_PWD")
+DEST_PWD = os.getenv("DEST_DB_PWD")
+
+if not SRC_PWD or not DEST_PWD:
+    raise RuntimeError("Database passwords not found in environment variables!")
+
+# ---------- CONNECTIONS ----------
+src = pyodbc.connect(
+    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+    f"SERVER={SRC_SERVER};DATABASE=master;"
+    f"UID=sa;PWD={SRC_PWD};Encrypt=yes;TrustServerCertificate=yes;"
+)
+
+dest = pyodbc.connect(
+    f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+    f"SERVER={DEST_SERVER};DATABASE=master;"
+    f"UID=sa;PWD={DEST_PWD};Encrypt=yes;TrustServerCertificate=yes;"
+)
+
+# ---------- BACKUP ----------
+backup_path = os.path.join(BACKUP_DIR, BACKUP_FILE)
+
+backup_sql = f"""
+BACKUP DATABASE [{DATABASE}]
+TO DISK = N'{backup_path}'
+WITH INIT, COMPRESSION,
+     ENCRYPTION
+     (ALGORITHM = AES_256,
+      SERVER CERTIFICATE = BackupCert),
+     STATS = 10;
+"""
+
+logging.info("Starting backup...")
+src.autocommit = True
+src.cursor().execute(backup_sql)
+logging.info(f"Backup completed: {backup_path}")
+
+# ---------- VERIFY ----------
+verify_sql = f"RESTORE VERIFYONLY FROM DISK = N'{backup_path}';"
+dest.autocommit = True
+dest.cursor().execute(verify_sql)
+logging.info("Backup verified successfully.")
+
+# ---------- RESTORE ----------
+restore_sql = f"""
+ALTER DATABASE [{DATABASE}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+
+RESTORE DATABASE [{DATABASE}]
+FROM DISK = N'{backup_path}'
+WITH REPLACE, RECOVERY, STATS = 10;
+
+ALTER DATABASE [{DATABASE}] SET MULTI_USER;
+"""
+
+logging.info("Starting restore...")
+dest.cursor().execute(restore_sql)
+logging.info("Restore completed successfully.")
+
+src.close()
+dest.close()
+
+print("Secure database migration completed.")

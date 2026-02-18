@@ -7,6 +7,17 @@
 --setx DEST_DB_PWD "StrongPasswordHere"
 --*/*--
 
+--*/*--
+PS C:\WINDOWS\system32>
+setx SRC_DB_PWD "srcpassword@123"
+
+SUCCESS: Specified value was saved.
+PS C:\WINDOWS\system32> 
+setx DEST_DB_PWD "destpassword@123"
+
+SUCCESS: Specified value was saved
+--*/*--
+
 import pyodbc
 import logging
 import os
